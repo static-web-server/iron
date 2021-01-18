@@ -129,12 +129,13 @@
 //! implementing the `catch` method to also do the necessary action.
 
 use std::sync::Arc;
-use {Request, Response, IronResult, IronError};
+
+use crate::{IronError, IronResult, Request, Response};
 
 /// `Handler`s are responsible for handling requests by creating Responses from Requests.
 pub trait Handler: Send + Sync + 'static {
     /// Produce a `Response` from a Request, with the possibility of error.
-    fn handle(&self, &mut Request) -> IronResult<Response>;
+    fn handle(&self, _: &mut Request) -> IronResult<Response>;
 }
 
 /// `BeforeMiddleware` are fired before a `Handler` is called inside of a Chain.
@@ -149,14 +150,18 @@ pub trait Handler: Send + Sync + 'static {
 /// instead be `AroundMiddleware`.
 pub trait BeforeMiddleware: Send + Sync + 'static {
     /// Do whatever work this middleware should do with a `Request` object.
-    fn before(&self, _: &mut Request) -> IronResult<()> { Ok(()) }
+    fn before(&self, _: &mut Request) -> IronResult<()> {
+        Ok(())
+    }
 
     /// Respond to an error thrown by a previous `BeforeMiddleware`.
     ///
     /// Returning a `Ok` will cause the request to resume the normal flow at the
     /// next `BeforeMiddleware`, or if this was the last `BeforeMiddleware`,
     /// at the `Handler`.
-    fn catch(&self, _: &mut Request, err: IronError) -> IronResult<()> { Err(err) }
+    fn catch(&self, _: &mut Request, err: IronError) -> IronResult<()> {
+        Err(err)
+    }
 }
 
 /// `AfterMiddleware` are fired after a `Handler` is called inside of a Chain.
@@ -210,7 +215,7 @@ pub struct Chain {
     afters: Vec<Box<AfterMiddleware>>,
 
     // Internal invariant: this is always Some
-    handler: Option<Box<Handler>>
+    handler: Option<Box<Handler>>,
 }
 
 impl Chain {
@@ -219,7 +224,7 @@ impl Chain {
         Chain {
             befores: vec![],
             afters: vec![],
-            handler: Some(Box::new(handler) as Box<Handler>)
+            handler: Some(Box::new(handler) as Box<Handler>),
         }
     }
 
@@ -228,7 +233,10 @@ impl Chain {
     /// Middleware that have a Before and After piece should have a constructor
     /// which returns both as a tuple, so it can be passed directly to link.
     pub fn link<B, A>(&mut self, link: (B, A)) -> &mut Chain
-    where A: AfterMiddleware, B: BeforeMiddleware {
+    where
+        A: AfterMiddleware,
+        B: BeforeMiddleware,
+    {
         let (before, after) = link;
         self.befores.push(Box::new(before) as Box<BeforeMiddleware>);
         self.afters.push(Box::new(after) as Box<AfterMiddleware>);
@@ -238,7 +246,9 @@ impl Chain {
     /// Link a `BeforeMiddleware` to the `Chain`, after all previously linked
     /// `BeforeMiddleware`.
     pub fn link_before<B>(&mut self, before: B) -> &mut Chain
-    where B: BeforeMiddleware {
+    where
+        B: BeforeMiddleware,
+    {
         self.befores.push(Box::new(before) as Box<BeforeMiddleware>);
         self
     }
@@ -246,7 +256,9 @@ impl Chain {
     /// Link a `AfterMiddleware` to the `Chain`, after all previously linked
     /// `AfterMiddleware`.
     pub fn link_after<A>(&mut self, after: A) -> &mut Chain
-    where A: AfterMiddleware {
+    where
+        A: AfterMiddleware,
+    {
         self.afters.push(Box::new(after) as Box<AfterMiddleware>);
         self
     }
@@ -256,13 +268,17 @@ impl Chain {
     /// Note: This function is being renamed `link_around()`, and will
     /// eventually be removed.
     pub fn around<A>(&mut self, around: A) -> &mut Chain
-    where A: AroundMiddleware {
+    where
+        A: AroundMiddleware,
+    {
         self.link_around(around)
     }
 
     /// Apply an `AroundMiddleware` to the `Handler` in this `Chain`.
     pub fn link_around<A>(&mut self, around: A) -> &mut Chain
-    where A: AroundMiddleware {
+    where
+        A: AroundMiddleware,
+    {
         let mut handler = self.handler.take().unwrap();
         handler = around.around(handler);
         self.handler = Some(handler);
@@ -286,17 +302,21 @@ impl Chain {
     //
     // If the index is out of bounds for the before middleware Vec,
     // this instead behaves the same as fail_from_handler.
-    fn fail_from_before(&self, req: &mut Request, index: usize,
-                        mut err: IronError) -> IronResult<Response> {
+    fn fail_from_before(
+        &self,
+        req: &mut Request,
+        index: usize,
+        mut err: IronError,
+    ) -> IronResult<Response> {
         // If this was the last before, yield to next phase.
         if index >= self.befores.len() {
-            return self.fail_from_handler(req, err)
+            return self.fail_from_handler(req, err);
         }
 
         for (i, before) in self.befores[index..].iter().enumerate() {
             err = match before.catch(req, err) {
                 Err(err) => err,
-                Ok(()) => return self.continue_from_before(req, index + i + 1)
+                Ok(()) => return self.continue_from_before(req, index + i + 1),
             };
         }
 
@@ -306,8 +326,7 @@ impl Chain {
 
     // Enter the error flow from an errored handle, starting with the
     // first AfterMiddleware.
-    fn fail_from_handler(&self, req: &mut Request,
-                         err: IronError) -> IronResult<Response> {
+    fn fail_from_handler(&self, req: &mut Request, err: IronError) -> IronResult<Response> {
         // Yield to next phase, nothing to do here.
         self.fail_from_after(req, 0, err)
     }
@@ -317,15 +336,21 @@ impl Chain {
     //
     // If the index is out of bounds for the after middleware Vec,
     // this instead just returns the passed error.
-    fn fail_from_after(&self, req: &mut Request, index: usize,
-                       mut err: IronError) -> IronResult<Response> {
+    fn fail_from_after(
+        &self,
+        req: &mut Request,
+        index: usize,
+        mut err: IronError,
+    ) -> IronResult<Response> {
         // If this was the last after, we're done.
-        if index == self.afters.len() { return Err(err) }
+        if index == self.afters.len() {
+            return Err(err);
+        }
 
         for (i, after) in self.afters[index..].iter().enumerate() {
             err = match after.catch(req, err) {
                 Err(err) => err,
-                Ok(res) => return self.continue_from_after(req, index + i + 1, res)
+                Ok(res) => return self.continue_from_after(req, index + i + 1, res),
             }
         }
 
@@ -335,17 +360,16 @@ impl Chain {
 
     // Enter the normal flow in the before middleware, starting with the passed
     // index.
-    fn continue_from_before(&self, req: &mut Request,
-                            index: usize) -> IronResult<Response> {
+    fn continue_from_before(&self, req: &mut Request, index: usize) -> IronResult<Response> {
         // If this was the last beforemiddleware, start at the handler.
         if index >= self.befores.len() {
-            return self.continue_from_handler(req)
+            return self.continue_from_handler(req);
         }
 
         for (i, before) in self.befores[index..].iter().enumerate() {
             match before.before(req) {
-                Ok(()) => {},
-                Err(err) => return self.fail_from_before(req, index + i + 1, err)
+                Ok(()) => {}
+                Err(err) => return self.fail_from_before(req, index + i + 1, err),
             }
         }
 
@@ -358,14 +382,18 @@ impl Chain {
         // unwrap is safe because it's always Some
         match self.handler.as_ref().unwrap().handle(req) {
             Ok(res) => self.continue_from_after(req, 0, res),
-            Err(err) => self.fail_from_handler(req, err)
+            Err(err) => self.fail_from_handler(req, err),
         }
     }
 
     // Enter the normal flow in the after middleware, starting with the passed
     // index.
-    fn continue_from_after(&self, req: &mut Request, index: usize,
-                            mut res: Response) -> IronResult<Response> {
+    fn continue_from_after(
+        &self,
+        req: &mut Request,
+        index: usize,
+        mut res: Response,
+    ) -> IronResult<Response> {
         // If this was the last after middleware, we're done.
         if index >= self.afters.len() {
             return Ok(res);
@@ -374,7 +402,7 @@ impl Chain {
         for (i, after) in self.afters[index..].iter().enumerate() {
             res = match after.after(req, res) {
                 Ok(r) => r,
-                Err(err) => return self.fail_from_after(req, index + i + 1, err)
+                Err(err) => return self.fail_from_after(req, index + i + 1, err),
             }
         }
 
@@ -384,26 +412,30 @@ impl Chain {
 }
 
 impl<F> Handler for F
-where F: Send + Sync + 'static + Fn(&mut Request) -> IronResult<Response> {
+where
+    F: Send + Sync + 'static + Fn(&mut Request) -> IronResult<Response>,
+{
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         (*self)(req)
     }
 }
 
-impl Handler for Box<Handler> {
+impl Handler for Box<dyn Handler> {
     fn handle(&self, req: &mut Request) -> IronResult<Response> {
         (**self).handle(req)
     }
 }
 
 impl<F> BeforeMiddleware for F
-where F: Send + Sync + 'static + Fn(&mut Request) -> IronResult<()> {
+where
+    F: Send + Sync + 'static + Fn(&mut Request) -> IronResult<()>,
+{
     fn before(&self, req: &mut Request) -> IronResult<()> {
         (*self)(req)
     }
 }
 
-impl BeforeMiddleware for Box<BeforeMiddleware> {
+impl BeforeMiddleware for Box<dyn BeforeMiddleware> {
     fn before(&self, req: &mut Request) -> IronResult<()> {
         (**self).before(req)
     }
@@ -413,7 +445,10 @@ impl BeforeMiddleware for Box<BeforeMiddleware> {
     }
 }
 
-impl<T> BeforeMiddleware for Arc<T> where T: BeforeMiddleware {
+impl<T> BeforeMiddleware for Arc<T>
+where
+    T: BeforeMiddleware,
+{
     fn before(&self, req: &mut Request) -> IronResult<()> {
         (**self).before(req)
     }
@@ -424,13 +459,15 @@ impl<T> BeforeMiddleware for Arc<T> where T: BeforeMiddleware {
 }
 
 impl<F> AfterMiddleware for F
-where F: Send + Sync + 'static + Fn(&mut Request, Response) -> IronResult<Response> {
+where
+    F: Send + Sync + 'static + Fn(&mut Request, Response) -> IronResult<Response>,
+{
     fn after(&self, req: &mut Request, res: Response) -> IronResult<Response> {
         (*self)(req, res)
     }
 }
 
-impl AfterMiddleware for Box<AfterMiddleware> {
+impl AfterMiddleware for Box<dyn AfterMiddleware> {
     fn after(&self, req: &mut Request, res: Response) -> IronResult<Response> {
         (**self).after(req, res)
     }
@@ -440,7 +477,10 @@ impl AfterMiddleware for Box<AfterMiddleware> {
     }
 }
 
-impl<T> AfterMiddleware for Arc<T> where T: AfterMiddleware {
+impl<T> AfterMiddleware for Arc<T>
+where
+    T: AfterMiddleware,
+{
     fn after(&self, req: &mut Request, res: Response) -> IronResult<Response> {
         (**self).after(req, res)
     }
@@ -451,8 +491,10 @@ impl<T> AfterMiddleware for Arc<T> where T: AfterMiddleware {
 }
 
 impl<F> AroundMiddleware for F
-where F: FnOnce(Box<Handler>) -> Box<Handler> {
-    fn around(self, handler: Box<Handler>) -> Box<Handler> {
+where
+    F: FnOnce(Box<dyn Handler>) -> Box<dyn Handler>,
+{
+    fn around(self, handler: Box<dyn Handler>) -> Box<dyn Handler> {
         self(handler)
     }
 }

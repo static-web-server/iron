@@ -1,27 +1,28 @@
 //! Iron's HTTP Request representation and associated methods.
 
+use std::fmt::{self, Debug};
 use std::io::{self, Read};
 use std::net::SocketAddr;
-use std::fmt::{self, Debug};
 
-use hyper::uri::RequestUri::{AbsoluteUri, AbsolutePath};
-use hyper::net::NetworkStream;
 use hyper::http::h1::HttpReader;
+use hyper::net::NetworkStream;
+use hyper::uri::RequestUri::{AbsolutePath, AbsoluteUri};
 use hyper::version::HttpVersion;
 
-use typemap::TypeMap;
+use hyper::method::Method;
 use plugin::Extensible;
-use method::Method;
+use typemap::TypeMap;
 
-pub use hyper::server::request::Request as HttpRequest;
 use hyper::buffer;
+pub use hyper::server::request::Request as HttpRequest;
 
 #[cfg(test)]
 use std::net::ToSocketAddrs;
 
-pub use self::url::Url;
+pub use crate::request::url::Url;
 
-use {Protocol, Plugin, Headers, Set, headers};
+use crate::iron::Protocol;
+use crate::{headers, modifier::Set, Headers, Plugin};
 
 mod url;
 
@@ -29,6 +30,7 @@ mod url;
 ///
 /// Stores all the properties of the client's request plus
 /// an `TypeMap` for data communication between middleware.
+#[non_exhaustive]
 pub struct Request<'a, 'b: 'a> {
     /// The requested URL.
     pub url: Url,
@@ -53,20 +55,16 @@ pub struct Request<'a, 'b: 'a> {
 
     /// The version of the HTTP protocol used.
     pub version: HttpVersion,
-
-    _p: (),
 }
 
 impl<'a, 'b> Debug for Request<'a, 'b> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        try!(writeln!(f, "Request {{"));
-
-        try!(writeln!(f, "    url: {:?}", self.url));
-        try!(writeln!(f, "    method: {:?}", self.method));
-        try!(writeln!(f, "    remote_addr: {:?}", self.remote_addr));
-        try!(writeln!(f, "    local_addr: {:?}", self.local_addr));
-
-        try!(write!(f, "}}"));
+        writeln!(f, "Request {{")?;
+        writeln!(f, "    url: {:?}", self.url)?;
+        writeln!(f, "    method: {:?}", self.method)?;
+        writeln!(f, "    remote_addr: {:?}", self.remote_addr)?;
+        writeln!(f, "    local_addr: {:?}", self.local_addr)?;
+        write!(f, "}}")?;
         Ok(())
     }
 }
@@ -75,16 +73,17 @@ impl<'a, 'b> Request<'a, 'b> {
     /// Create a request from an HttpRequest.
     ///
     /// This constructor consumes the HttpRequest.
-    pub fn from_http(req: HttpRequest<'a, 'b>, local_addr: SocketAddr, protocol: &Protocol)
-                     -> Result<Request<'a, 'b>, String> {
+    pub fn from_http(
+        req: HttpRequest<'a, 'b>,
+        local_addr: SocketAddr,
+        protocol: &Protocol,
+    ) -> Result<Request<'a, 'b>, String> {
         let (addr, method, headers, uri, version, reader) = req.deconstruct();
 
         let url = match uri {
-            AbsoluteUri(ref url) => {
-                match Url::from_generic_url(url.clone()) {
-                    Ok(url) => url,
-                    Err(e) => return Err(e)
-                }
+            AbsoluteUri(ref url) => match Url::from_generic_url(url.clone()) {
+                Ok(url) => url,
+                Err(e) => return Err(e),
             },
 
             AbsolutePath(ref path) => {
@@ -96,37 +95,46 @@ impl<'a, 'b> Request<'a, 'b> {
                         } else {
                             format!("{}://{}{}", protocol.name(), host.hostname, path)
                         }
-                    },
+                    }
                     (v, None) if v < HttpVersion::Http11 => {
                         // Attempt to use the local address? (host header is not required in HTTP/1.0).
                         match local_addr {
-                            SocketAddr::V4(addr4) => format!("{}://{}:{}{}", protocol.name(), addr4.ip(), local_addr.port(), path),
-                            SocketAddr::V6(addr6) => format!("{}://[{}]:{}{}", protocol.name(), addr6.ip(), local_addr.port(), path),
+                            SocketAddr::V4(addr4) => format!(
+                                "{}://{}:{}{}",
+                                protocol.name(),
+                                addr4.ip(),
+                                local_addr.port(),
+                                path
+                            ),
+                            SocketAddr::V6(addr6) => format!(
+                                "{}://[{}]:{}{}",
+                                protocol.name(),
+                                addr6.ip(),
+                                local_addr.port(),
+                                path
+                            ),
                         }
-                    },
-                    (_, None) => {
-                        return Err("No host specified in request".into())
                     }
+                    (_, None) => return Err("No host specified in request".into()),
                 };
 
                 match Url::parse(&url_string) {
                     Ok(url) => url,
-                    Err(e) => return Err(format!("Couldn't parse requested URL: {}", e))
+                    Err(e) => return Err(format!("Couldn't parse requested URL: {}", e)),
                 }
-            },
-            _ => return Err("Unsupported request URI".into())
+            }
+            _ => return Err("Unsupported request URI".into()),
         };
 
         Ok(Request {
-            url: url,
+            url,
             remote_addr: addr,
-            local_addr: local_addr,
-            headers: headers,
+            local_addr,
+            headers,
             body: Body::new(reader),
-            method: method,
+            method,
             extensions: TypeMap::new(),
-            version: version,
-            _p: (),
+            version,
         })
     }
 
@@ -137,11 +145,10 @@ impl<'a, 'b> Request<'a, 'b> {
             remote_addr: "localhost:3000".to_socket_addrs().unwrap().next().unwrap(),
             local_addr: "localhost:3000".to_socket_addrs().unwrap().next().unwrap(),
             headers: Headers::new(),
-            body: unsafe { ::std::mem::uninitialized() }, // FIXME(reem): Ugh
+            body: unsafe { std::mem::MaybeUninit::uninit().assume_init() }, // FIXME(reem): Ugh
             method: Method::Get,
             extensions: TypeMap::new(),
             version: HttpVersion::Http11,
-            _p: (),
         }
     }
 }
@@ -151,7 +158,9 @@ pub struct Body<'a, 'b: 'a>(HttpReader<&'a mut buffer::BufReader<&'b mut Network
 
 impl<'a, 'b> Body<'a, 'b> {
     /// Create a new reader for use in an Iron request from a hyper HttpReader.
-    pub fn new(reader: HttpReader<&'a mut buffer::BufReader<&'b mut NetworkStream>>) -> Body<'a, 'b> {
+    pub fn new(
+        reader: HttpReader<&'a mut buffer::BufReader<&'b mut NetworkStream>>,
+    ) -> Body<'a, 'b> {
         Body(reader)
     }
 }

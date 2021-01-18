@@ -1,5 +1,4 @@
 [package]
-
 name = "iron"
 version = "0.6.1"
 description = "Extensible, Concurrency Focused Web Development in Rust."
@@ -17,6 +16,7 @@ authors = [
 [lib]
 name = "iron"
 path = "src/lib.rs"
+edition = "2018"
 
 [features]
 default = []
@@ -26,7 +26,7 @@ native-tls-example = ["hyper-native-tls"]
 typemap = "0.3"
 url = "1.1"
 plugin = "0.2"
-mime_guess = "1.8.1"
+mime_guess = "1.8"
 modifier = "0.1"
 log = "0.3"
 num_cpus = "1.0"

@@ -19,23 +19,29 @@
 ///
 #[macro_export]
 macro_rules! itry {
-    ($result:expr) => (itry!($result, $crate::status::InternalServerError));
+    ($result:expr) => {
+        itry!($result, $crate::status::InternalServerError)
+    };
 
-    ($result:expr, $modifier:expr) => (match $result {
-        ::std::result::Result::Ok(val) => val,
-        ::std::result::Result::Err(err) => return ::std::result::Result::Err(
-            $crate::IronError::new(err, $modifier))
-    })
+    ($result:expr, $modifier:expr) => {
+        match $result {
+            Ok(val) => val,
+            Err(err) => return Err($crate::IronError::new(err, $modifier)),
+        }
+    };
 }
 
 /// Unwrap the given `Option` or return a `Ok(Response::new())` with the given
 /// modifier. The default modifier is `status::BadRequest`.
 #[macro_export]
 macro_rules! iexpect {
-    ($option:expr) => (iexpect!($option, $crate::status::BadRequest));
-    ($option:expr, $modifier:expr) => (match $option {
-        ::std::option::Option::Some(x) => x,
-        ::std::option::Option::None => return ::std::result::Result::Ok(
-            $crate::response::Response::with($modifier))
-    })
+    ($option:expr) => {
+        iexpect!($option, $crate::status::BadRequest)
+    };
+    ($option:expr, $modifier:expr) => {
+        match $option {
+            Some(x) => x,
+            None => return Ok($crate::response::Response::with($modifier)),
+        }
+    };
 }

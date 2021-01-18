@@ -12,25 +12,24 @@
 //
 // ```
 
-extern crate iron;
 #[cfg(feature = "native-tls-example")]
 extern crate hyper_native_tls;
+extern crate iron;
 
 #[cfg(feature = "native-tls-example")]
 fn main() {
     // Avoid unused errors due to conditional compilation ('native-tls-example' feature is not default)
     use hyper_native_tls::NativeTlsServer;
-    use iron::{Iron, Request, Response};
     use iron::status;
-    use std::result::Result;
+    use iron::{Iron, Request, Response};
 
     let ssl = NativeTlsServer::new("identity.p12", "mypass").unwrap();
 
-    match Iron::new(|_: &mut Request| {
-        Ok(Response::with((status::Ok, "Hello world!")))
-    }).https("127.0.0.1:3000", ssl) {
-        Result::Ok(listening) => println!("{:?}", listening),
-        Result::Err(err) => panic!("{:?}", err),
+    match Iron::new(|_: &mut Request| Ok(Response::with((status::Ok, "Hello world!"))))
+        .https("127.0.0.1:3000", ssl)
+    {
+        Ok(listening) => println!("{:?}", listening),
+        Err(err) => panic!("{:?}", err),
     }
     // curl -vvvv https://127.0.0.1:3000/ -k
 }

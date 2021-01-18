@@ -1,4 +1,8 @@
-#![doc(html_logo_url = "https://avatars0.githubusercontent.com/u/7853871?s=128", html_favicon_url = "https://avatars0.githubusercontent.com/u/7853871?s=256", html_root_url = "http://ironframework.io/core/iron")]
+#![doc(
+    html_logo_url = "https://avatars0.githubusercontent.com/u/7853871?s=128",
+    html_favicon_url = "https://avatars0.githubusercontent.com/u/7853871?s=256",
+    html_root_url = "http://ironframework.io/core/iron"
+)]
 #![cfg_attr(test, deny(warnings))]
 #![allow(bare_trait_objects)]
 #![deny(missing_docs)]
@@ -61,29 +65,29 @@
 //!
 
 // Stdlib dependencies
-#[macro_use] extern crate log;
+#[macro_use]
+extern crate log;
 
 // Third party packages
 extern crate hyper;
-extern crate typemap as tmap;
-extern crate plugin;
-extern crate url as url_ext;
-extern crate num_cpus;
 extern crate mime_guess;
+extern crate num_cpus;
+extern crate plugin;
+extern crate typemap as tmap;
+extern crate url as url_ext;
 
 // Request + Response
 pub use request::{Request, Url};
 pub use response::Response;
 
 // Middleware system
-pub use middleware::{BeforeMiddleware, AfterMiddleware, AroundMiddleware,
-                     Handler, Chain};
+pub use middleware::{AfterMiddleware, AroundMiddleware, BeforeMiddleware, Chain, Handler};
 
 // Server
-pub use iron::*;
+pub use crate::iron::*;
 
 // Extensions
-pub use typemap::TypeMap;
+pub use crate::typemap::TypeMap;
 
 // Headers
 pub use hyper::header as headers;
@@ -93,7 +97,7 @@ pub use hyper::header::Headers;
 pub use plugin::Pluggable as Plugin;
 
 // Expose modifiers.
-pub use modifier::Set;
+pub use crate::modifier::Set;
 
 // Errors
 pub use error::Error;
@@ -121,13 +125,12 @@ pub type IronResult<T> = Result<T, IronError>;
 /// `IronResult`, `IronError` and `Iron`.
 pub mod prelude {
     #[doc(no_inline)]
-    pub use {Set, Plugin, Chain, Request, Response,
-             IronResult, IronError, Iron};
+    pub use crate::{Chain, Iron, IronError, IronResult, Plugin, Request, Response, Set};
 }
 
 /// Re-exports from the `TypeMap` crate.
 pub mod typemap {
-    pub use tmap::{TypeMap, Key};
+    pub use tmap::{Key, TypeMap};
 }
 
 /// Re-exports from the Modifier crate.
@@ -143,9 +146,9 @@ pub mod url {
 
 /// Status Codes
 pub mod status {
+    pub use hyper::status::StatusClass;
     pub use hyper::status::StatusCode as Status;
     pub use hyper::status::StatusCode::*;
-    pub use hyper::status::StatusClass;
 }
 
 /// HTTP Methods

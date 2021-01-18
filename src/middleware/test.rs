@@ -3,62 +3,67 @@ use std::sync::atomic::Ordering::Relaxed;
 use std::sync::Arc;
 
 use self::Kind::{Fine, Prob};
+use crate::*;
 
-use prelude::*;
-use {AfterMiddleware, BeforeMiddleware, Handler};
-
-#[test] fn test_chain_normal() {
+#[test]
+fn test_chain_normal() {
     test_chain(
         (vec![Fine, Fine, Fine], Fine, vec![Fine, Fine, Fine]),
-        (vec![Fine, Fine, Fine], Fine, vec![Fine, Fine, Fine])
+        (vec![Fine, Fine, Fine], Fine, vec![Fine, Fine, Fine]),
     );
 }
 
-#[test] fn test_chain_before_error() {
+#[test]
+fn test_chain_before_error() {
     test_chain(
         // Error in before
         (vec![Prob, Prob, Prob], Fine, vec![Prob, Prob, Prob]),
-        (vec![Fine, Prob, Prob], Prob, vec![Prob, Prob, Prob])
+        (vec![Fine, Prob, Prob], Prob, vec![Prob, Prob, Prob]),
     );
 }
 
-#[test] fn test_chain_handler_error() {
+#[test]
+fn test_chain_handler_error() {
     test_chain(
         // Error in handler
         (vec![Fine, Fine, Fine], Prob, vec![Prob, Prob, Prob]),
-        (vec![Fine, Fine, Fine], Fine, vec![Prob, Prob, Prob])
+        (vec![Fine, Fine, Fine], Fine, vec![Prob, Prob, Prob]),
     );
 }
 
-#[test] fn test_chain_after_error() {
+#[test]
+fn test_chain_after_error() {
     test_chain(
         // Error in after
         (vec![Fine, Fine, Fine], Fine, vec![Prob, Prob, Prob]),
-        (vec![Fine, Fine, Fine], Fine, vec![Fine, Prob, Prob])
+        (vec![Fine, Fine, Fine], Fine, vec![Fine, Prob, Prob]),
     );
 }
 
-#[test] fn test_chain_before_error_then_handle() {
+#[test]
+fn test_chain_before_error_then_handle() {
     test_chain(
         // Error and handle in before middleware
         (vec![Prob, Prob, Fine, Fine], Fine, vec![Fine]),
-        (vec![Fine, Prob, Prob, Fine], Fine, vec![Fine])
+        (vec![Fine, Prob, Prob, Fine], Fine, vec![Fine]),
     );
 }
 
-#[test] fn test_chain_after_error_then_handle() {
+#[test]
+fn test_chain_after_error_then_handle() {
     test_chain(
         // Error and handle in after middleware
         (vec![], Fine, vec![Prob, Prob, Fine, Fine]),
-        (vec![], Fine, vec![Fine, Prob, Prob, Fine])
+        (vec![], Fine, vec![Fine, Prob, Prob, Fine]),
     );
 }
 
-#[test] fn test_chain_handler_error_then_handle() {
+#[test]
+fn test_chain_handler_error_then_handle() {
     test_chain(
         // Error in handler.
         (vec![], Prob, vec![Prob, Fine, Fine]),
-        (vec![], Fine, vec![Prob, Prob, Fine])
+        (vec![], Fine, vec![Prob, Prob, Fine]),
     );
 }
 
@@ -66,13 +71,13 @@ use {AfterMiddleware, BeforeMiddleware, Handler};
 #[derive(Debug, PartialEq)]
 enum Kind {
     Fine,
-    Prob
+    Prob,
 }
 
 struct Middleware {
     normal: Arc<AtomicBool>,
     error: Arc<AtomicBool>,
-    mode: Kind
+    mode: Kind,
 }
 
 impl BeforeMiddleware for Middleware {
@@ -81,8 +86,8 @@ impl BeforeMiddleware for Middleware {
         self.normal.store(true, Relaxed);
 
         match self.mode {
-            Fine => { Ok(()) },
-            Prob => { Err(error()) }
+            Fine => Ok(()),
+            Prob => Err(error()),
         }
     }
 
@@ -91,8 +96,8 @@ impl BeforeMiddleware for Middleware {
         self.error.store(true, Relaxed);
 
         match self.mode {
-            Fine => { Ok(()) },
-            Prob => { Err(error()) },
+            Fine => Ok(()),
+            Prob => Err(error()),
         }
     }
 }
@@ -103,8 +108,8 @@ impl Handler for Middleware {
         self.normal.store(true, Relaxed);
 
         match self.mode {
-            Fine => { Ok(response()) },
-            Prob => { Err(error()) }
+            Fine => Ok(response()),
+            Prob => Err(error()),
         }
     }
 }
@@ -115,8 +120,8 @@ impl AfterMiddleware for Middleware {
         self.normal.store(true, Relaxed);
 
         match self.mode {
-            Fine => { Ok(response()) },
-            Prob => { Err(error()) }
+            Fine => Ok(response()),
+            Prob => Err(error()),
         }
     }
 
@@ -125,8 +130,8 @@ impl AfterMiddleware for Middleware {
         self.error.store(true, Relaxed);
 
         match self.mode {
-            Fine => { Ok(response()) },
-            Prob => { Err(error()) },
+            Fine => Ok(response()),
+            Prob => Err(error()),
         }
     }
 }
@@ -137,12 +142,14 @@ fn request<'a, 'b>() -> Request<'a, 'b> {
 }
 
 // Stub response
-fn response() -> Response { Response::new() }
+fn response() -> Response {
+    Response::new()
+}
 
 // Stub error
 fn error() -> IronError {
-    use std::fmt::{self, Debug, Display};
     use std::error::Error as StdError;
+    use std::fmt::{self, Debug, Display};
 
     #[derive(Debug)]
     struct SomeError;
@@ -154,12 +161,14 @@ fn error() -> IronError {
     }
 
     impl StdError for SomeError {
-        fn description(&self) -> &str { "Some Error" }
+        fn description(&self) -> &str {
+            "Some Error"
+        }
     }
 
     IronError {
         error: Box::new(SomeError),
-        response: response()
+        response: response(),
     }
 }
 
@@ -174,39 +183,42 @@ fn counters(chain: &ChainLike<Kind>) -> ChainLike<Twice<Arc<AtomicBool>>> {
     let (ref befores, _, ref afters) = *chain;
 
     (
-        befores.iter()
+        befores
+            .iter()
             .map(|_| (sharedbool(false), sharedbool(false)))
             .collect::<Vec<_>>(),
-
         (sharedbool(false), sharedbool(false)),
-
-        afters.iter()
+        afters
+            .iter()
             .map(|_| (sharedbool(false), sharedbool(false)))
-            .collect::<Vec<_>>()
+            .collect::<Vec<_>>(),
     )
 }
 
-fn to_chain(counters: &ChainLike<Twice<Arc<AtomicBool>>>,
-            chain: ChainLike<Kind>) -> Chain {
+fn to_chain(counters: &ChainLike<Twice<Arc<AtomicBool>>>, chain: ChainLike<Kind>) -> Chain {
     let (befores, handler, afters) = chain;
     let (ref beforec, ref handlerc, ref afterc) = *counters;
 
-    let befores = befores.into_iter().zip(beforec.iter())
+    let befores = befores
+        .into_iter()
+        .zip(beforec.iter())
         .map(into_middleware)
         .map(|m| Box::new(m) as Box<BeforeMiddleware>)
         .collect::<Vec<_>>();
 
     let handler = into_middleware((handler, handlerc));
 
-    let afters = afters.into_iter().zip(afterc.iter())
+    let afters = afters
+        .into_iter()
+        .zip(afterc.iter())
         .map(into_middleware)
         .map(|m| Box::new(m) as Box<AfterMiddleware>)
         .collect::<Vec<_>>();
 
     Chain {
-        befores: befores,
+        befores,
         handler: Some(Box::new(handler) as Box<Handler>),
-        afters: afters
+        afters,
     }
 }
 
@@ -217,12 +229,16 @@ fn into_middleware(input: (Kind, &Twice<Arc<AtomicBool>>)) -> Middleware {
     Middleware {
         normal: normal.clone(),
         error: error.clone(),
-        mode: mode
+        mode,
     }
 }
 
 fn to_kind(val: bool) -> Kind {
-    if val { Fine } else { Prob }
+    if val {
+        Fine
+    } else {
+        Prob
+    }
 }
 
 fn test_chain(chain: ChainLike<Kind>, expected: ChainLike<Kind>) {
@@ -233,17 +249,22 @@ fn test_chain(chain: ChainLike<Kind>, expected: ChainLike<Kind>) {
     let _ = chain.handle(&mut request());
 
     // Get all the results
-    let outbefores = actual.0.into_iter()
-        .map(|(normal, _)| to_kind(normal.load(Relaxed))).collect::<Vec<_>>();
+    let outbefores = actual
+        .0
+        .into_iter()
+        .map(|(normal, _)| to_kind(normal.load(Relaxed)))
+        .collect::<Vec<_>>();
 
     let outhandler = to_kind((actual.1).0.load(Relaxed));
 
-    let outafters = actual.2.into_iter()
-        .map(|(normal, _)| to_kind(normal.load(Relaxed))).collect::<Vec<_>>();
+    let outafters = actual
+        .2
+        .into_iter()
+        .map(|(normal, _)| to_kind(normal.load(Relaxed)))
+        .collect::<Vec<_>>();
 
     let outchain = (outbefores, outhandler, outafters);
 
     // Yay! Actually do the test!
     assert_eq!(outchain, expected);
 }
-

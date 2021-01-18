@@ -54,11 +54,10 @@ use modifier::Modifier;
 
 use hyper::mime::{Mime, SubLevel, TopLevel};
 
-use {status, headers, Request, Response, Set, Url};
+use crate::{headers, modifier::Set, status, Request, Response, Url};
 
+use crate::response::{BodyReader, WriteBody};
 use mime_guess::guess_mime_type_opt;
-use response::{WriteBody, BodyReader};
-
 
 impl Modifier<Response> for Mime {
     #[inline]
@@ -74,7 +73,7 @@ impl Modifier<Response> for Box<WriteBody> {
     }
 }
 
-impl <R: io::Read + Send + 'static> Modifier<Response> for BodyReader<R> {
+impl<R: io::Read + Send + 'static> Modifier<Response> for BodyReader<R> {
     #[inline]
     fn modify(self, res: &mut Response) {
         res.body = Some(Box::new(self));
@@ -129,7 +128,7 @@ impl<'a> Modifier<Response> for &'a Path {
     /// Panics if there is no file at the passed-in Path.
     fn modify(self, res: &mut Response) {
         File::open(self)
-            .expect(&format!("No such file: {}", self.display()))
+            .unwrap_or_else(|_| panic!("No such file: {}", self.display()))
             .modify(res);
 
         let mime = mime_for_path(self);
@@ -160,14 +159,18 @@ impl Modifier<Response> for status::Status {
 pub struct Header<H: headers::Header + headers::HeaderFormat>(pub H);
 
 impl<H> Modifier<Response> for Header<H>
-where H: headers::Header + headers::HeaderFormat {
+where
+    H: headers::Header + headers::HeaderFormat,
+{
     fn modify(self, res: &mut Response) {
         res.headers.set(self.0);
     }
 }
 
 impl<'a, 'b, H> Modifier<Request<'a, 'b>> for Header<H>
-where H: headers::Header + headers::HeaderFormat {
+where
+    H: headers::Header + headers::HeaderFormat,
+{
     fn modify(self, res: &mut Request) {
         res.headers.set(self.0);
     }
@@ -194,10 +197,8 @@ impl Modifier<Response> for RedirectRaw {
 }
 
 fn mime_for_path(path: &Path) -> Mime {
-    guess_mime_type_opt(path)
-        .unwrap_or_else(|| Mime(TopLevel::Text, SubLevel::Plain, vec![]))
+    guess_mime_type_opt(path).unwrap_or_else(|| Mime(TopLevel::Text, SubLevel::Plain, vec![]))
 }
-
 
 #[cfg(test)]
 mod test {
@@ -205,13 +206,21 @@ mod test {
 
     #[test]
     fn test_mime_for_path() {
-        assert_eq!(mime_for_path(Path::new("foo.txt")),
-                   "text/plain".parse().unwrap());
-        assert_eq!(mime_for_path(Path::new("foo.jpg")),
-                   "image/jpeg".parse().unwrap());
-        assert_eq!(mime_for_path(Path::new("foo.zip")),
-                   "application/zip".parse().unwrap());
-        assert_eq!(mime_for_path(Path::new("foo")),
-                   "text/plain".parse().unwrap());
+        assert_eq!(
+            mime_for_path(Path::new("foo.txt")),
+            "text/plain".parse().unwrap()
+        );
+        assert_eq!(
+            mime_for_path(Path::new("foo.jpg")),
+            "image/jpeg".parse().unwrap()
+        );
+        assert_eq!(
+            mime_for_path(Path::new("foo.zip")),
+            "application/zip".parse().unwrap()
+        );
+        assert_eq!(
+            mime_for_path(Path::new("foo")),
+            "text/plain".parse().unwrap()
+        );
     }
 }

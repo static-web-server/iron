@@ -1,19 +1,19 @@
 //! Iron's HTTP Response representation and associated methods.
 
-use std::io::{self, Write};
 use std::fmt::{self, Debug};
 use std::fs::File;
+use std::io::{self, Write};
 
-use typemap::TypeMap;
-use plugin::Extensible;
-use modifier::{Set, Modifier};
 use hyper::header::Headers;
+use modifier::{Modifier, Set};
+use plugin::Extensible;
+use typemap::TypeMap;
 
-use status::{self, Status};
-use {Plugin, headers};
+use crate::status::{self, Status};
+use crate::{headers, Plugin};
 
-pub use hyper::server::response::Response as HttpResponse;
 use hyper::net::Fresh;
+pub use hyper::server::response::Response as HttpResponse;
 
 /// Wrapper type to set `Read`ers as response bodies
 pub struct BodyReader<R: Send>(pub R);
@@ -60,7 +60,7 @@ impl WriteBody for Box<io::Read + Send> {
     }
 }
 
-impl <R: io::Read + Send> WriteBody for BodyReader<R> {
+impl<R: io::Read + Send> WriteBody for BodyReader<R> {
     fn write_body(&mut self, res: &mut Write) -> io::Result<()> {
         io::copy(&mut self.0, res).map(|_| ())
     }
@@ -87,17 +87,17 @@ pub struct Response {
     pub extensions: TypeMap,
 
     /// The body of the response.
-    pub body: Option<Box<WriteBody>>
+    pub body: Option<Box<WriteBody>>,
 }
 
 impl Response {
     /// Construct a blank Response
-    pub fn new() -> Response {
-        Response {
+    pub fn new() -> Self {
+        Self {
             status: None, // Start with no response code.
-            body: None, // Start with no body.
+            body: None,   // Start with no body.
             headers: Headers::new(),
-            extensions: TypeMap::new()
+            extensions: TypeMap::new(),
         }
     }
 
@@ -132,21 +132,29 @@ impl Response {
     }
 }
 
-fn write_with_body(mut res: HttpResponse<Fresh>, mut body: Box<WriteBody>)
-                   -> io::Result<()> {
-    let content_type = res.headers().get::<headers::ContentType>()
-                           .map_or_else(|| headers::ContentType("text/plain".parse().unwrap()),
-                                        |cx| cx.clone());
+fn write_with_body(mut res: HttpResponse<Fresh>, mut body: Box<WriteBody>) -> io::Result<()> {
+    let content_type = res.headers().get::<headers::ContentType>().map_or_else(
+        || headers::ContentType("text/plain".parse().unwrap()),
+        |cx| cx.clone(),
+    );
     res.headers_mut().set(content_type);
 
-    let mut raw_res = try!(res.start());
-    try!(body.write_body(&mut raw_res));
+    let mut raw_res = res.start()?;
+    body.write_body(&mut raw_res)?;
     raw_res.end()
+}
+
+impl Default for Response {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Debug for Response {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        writeln!(f, "HTTP/1.1 {}\n{}",
+        writeln!(
+            f,
+            "HTTP/1.1 {}\n{}",
             self.status.unwrap_or(status::NotFound),
             self.headers
         )

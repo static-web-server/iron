@@ -2,8 +2,8 @@ extern crate iron;
 extern crate time;
 
 use iron::prelude::*;
-use iron::{Handler, BeforeMiddleware};
 use iron::status;
+use iron::{BeforeMiddleware, Handler};
 
 use std::error::Error;
 use std::fmt::{self, Debug};
@@ -21,7 +21,9 @@ impl fmt::Display for StringError {
 }
 
 impl Error for StringError {
-    fn description(&self) -> &str { &*self.0 }
+    fn description(&self) -> &str {
+        &*self.0
+    }
 }
 
 impl Handler for ErrorHandler {
@@ -37,7 +39,10 @@ impl Handler for ErrorHandler {
 
 impl BeforeMiddleware for ErrorProducer {
     fn before(&self, _: &mut Request) -> IronResult<()> {
-        Err(IronError::new(StringError("Error".to_string()), status::BadRequest))
+        Err(IronError::new(
+            StringError("Error".to_string()),
+            status::BadRequest,
+        ))
     }
 }
 
@@ -50,4 +55,3 @@ fn main() {
 
     Iron::new(chain).http("localhost:3000").unwrap();
 }
-

@@ -1,11 +1,12 @@
-Iron
-====
+# Iron
 
 [![Build Status](https://secure.travis-ci.org/iron/iron.svg?branch=master)](https://travis-ci.org/iron/iron)
 [![Crates.io Status](http://meritbadge.herokuapp.com/iron)](https://crates.io/crates/iron)
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://raw.githubusercontent.com/iron/iron/master/LICENSE)
 
 > Extensible, Concurrency Focused Web Development in Rust.
+
+**Note:** This is an updated (Rust 2018) fork used by `static-web-server` project.
 
 ## Response Timer Example
 
@@ -216,4 +217,3 @@ SuprDewd (1)
 ## License
 
 MIT
-

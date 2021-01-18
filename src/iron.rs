@@ -1,20 +1,18 @@
 //! Exposes the `Iron` type, the main entrance point of the
 //! `Iron` library.
 
-use std::net::{ToSocketAddrs, SocketAddr};
+use hyper::net::{Fresh, HttpListener, HttpsListener, NetworkListener, SslServer};
+use hyper::server::Server;
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::time::Duration;
 
 pub use hyper::server::Listening;
-use hyper::server::Server;
-use hyper::net::{Fresh, SslServer, HttpListener, HttpsListener, NetworkListener};
 
-use request::HttpRequest;
-use response::HttpResponse;
-
-use error::HttpResult;
-
-use {Request, Handler};
-use status;
+use crate::error::HttpResult;
+use crate::request::HttpRequest;
+use crate::response::HttpResponse;
+use crate::status;
+use crate::{Handler, Request};
 
 /// The primary entrance point to `Iron`, a `struct` to instantiate a new server.
 ///
@@ -52,7 +50,7 @@ pub struct Timeouts {
     /// Controls the timeout for writes on existing connections.
     ///
     /// The default is `Some(Duration::from_secs(1))`
-    pub write: Option<Duration>
+    pub write: Option<Duration>,
 }
 
 impl Default for Timeouts {
@@ -60,7 +58,7 @@ impl Default for Timeouts {
         Timeouts {
             keep_alive: Some(Duration::from_secs(5)),
             read: Some(Duration::from_secs(30)),
-            write: Some(Duration::from_secs(1))
+            write: Some(Duration::from_secs(1)),
         }
     }
 }
@@ -102,7 +100,7 @@ impl<H: Handler> Iron<H> {
     /// passed in `Handler`.
     pub fn new(handler: H) -> Iron<H> {
         Iron {
-            handler: handler,
+            handler,
             timeouts: Timeouts::default(),
             threads: 8 * ::num_cpus::get(),
         }
@@ -117,7 +115,8 @@ impl<H: Handler> Iron<H> {
     /// The thread returns a guard that will automatically join with the parent
     /// once it is dropped, blocking until this happens.
     pub fn http<A>(self, addr: A) -> HttpResult<Listening>
-        where A: ToSocketAddrs
+    where
+        A: ToSocketAddrs,
     {
         HttpListener::new(addr).and_then(|l| self.listen(l, Protocol::http()))
     }
@@ -131,8 +130,9 @@ impl<H: Handler> Iron<H> {
     /// The thread returns a guard that will automatically join with the parent
     /// once it is dropped, blocking until this happens.
     pub fn https<A, S>(self, addr: A, ssl: S) -> HttpResult<Listening>
-        where A: ToSocketAddrs,
-              S: 'static + SslServer + Send + Clone
+    where
+        A: ToSocketAddrs,
+        S: 'static + SslServer + Send + Clone,
     {
         HttpsListener::new(addr, ssl).and_then(|l| self.listen(l, Protocol::http()))
     }
@@ -141,12 +141,13 @@ impl<H: Handler> Iron<H> {
     ///
     /// Most use cases may call `http` and `https` methods instead of this.
     pub fn listen<L>(self, mut listener: L, protocol: Protocol) -> HttpResult<Listening>
-        where L: 'static + NetworkListener + Send
+    where
+        L: 'static + NetworkListener + Send,
     {
         let handler = RawHandler {
             handler: self.handler,
-            addr: try!(listener.local_addr()),
-            protocol: protocol,
+            addr: listener.local_addr()?,
+            protocol,
         };
 
         let mut server = Server::new(listener);
@@ -173,11 +174,14 @@ impl<H: Handler> ::hyper::server::Handler for RawHandler<H> {
         match Request::from_http(http_req, self.addr, &self.protocol) {
             Ok(mut req) => {
                 // Dispatch the request, write the response back to http_res
-                self.handler.handle(&mut req).unwrap_or_else(|e| {
-                    error!("Error handling:\n{:?}\nError was: {:?}", req, e.error);
-                    e.response
-                }).write_back(http_res)
-            },
+                self.handler
+                    .handle(&mut req)
+                    .unwrap_or_else(|e| {
+                        error!("Error handling:\n{:?}\nError was: {:?}", req, e.error);
+                        e.response
+                    })
+                    .write_back(http_res)
+            }
             Err(e) => {
                 error!("Error creating request:\n    {}", e);
                 bad_request(http_res)
@@ -191,9 +195,7 @@ fn bad_request(mut http_res: HttpResponse<Fresh>) {
 
     // Consume and flush the response.
     // We would like this to work, but can't do anything if it doesn't.
-    if let Ok(res) = http_res.start()
-    {
+    if let Ok(res) = http_res.start() {
         let _ = res.end();
     }
 }
-

@@ -1,6 +1,6 @@
 extern crate iron;
 
-use iron::{Iron, Request, Response, IronResult, AfterMiddleware, Chain};
+use iron::{AfterMiddleware, Chain, Iron, IronResult, Request, Response};
 
 struct DefaultContentType;
 impl AfterMiddleware for DefaultContentType {
@@ -13,8 +13,6 @@ impl AfterMiddleware for DefaultContentType {
         Ok(resp)
     }
 }
-
-
 
 fn info(req: &mut Request) -> IronResult<Response> {
     // Get a header using a standard iron::headers
